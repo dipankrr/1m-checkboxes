@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>1m checkbox</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+
+    <div id="boxes-cnt">
+        <!-- <input type="checkbox" id="c1" value="1"> -->
+    </div>
+
+
+  <!----------------------- javascript --------------------------->
+<script src="/socket.io/socket.io.js"></script>
+
+<script>
+
+    const container = document.getElementById("boxes-cnt");
+
+    const socket = io();
+
+    socket.on("connect", () => {
+        console.log("Connected:", socket.id);
+        socket.emit("client:init", {})
+    });
+
+
+    socket.on("server:init:boxes", (boxes)=>{
+
+        const checkedSet = new Set(boxes);
+
+        Array.from({ length: 100000 }).map((_, i) => {
+            const box = document.createElement("input");
+            box.type = "checkbox";
+            box.id = i;
+            box.value = i;
+
+            if(checkedSet.has(i)) box.checked = true
+            
+            container.appendChild(box);
+      });
+    })
+
+    container.addEventListener("change", (e) => {
+        if (e.target.type === "checkbox") {
+            socket.emit("client:box:clicked", {
+                index: Number(e.target.id),
+                checked: e.target.checked
+            });
+        }
+    });
+
+    socket.on("server:box:clicked", (box)=>{
+        console.log("CLIENT:: box-clicked: ", box);
+        document.getElementById(box.index).checked = box.checked;
+    })
+
+
+</script>
+
+
+</body>
+</html>

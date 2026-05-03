@@ -1,0 +1,9 @@
+- virtualization for frontend
+- make beautiful chai theme
+
+- bitmap
+- redis bitmap for state
+- then redis pubsub
+- batch sending ~50ms
+- rate limit
+- chunking while init state send

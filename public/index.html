@@ -1,67 +1,134 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>1m checkbox</title>
-    <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Virtualized Checkboxes</title>
+<link rel="stylesheet" href="style.css">
 </head>
+
 <body>
 
+<div id="viewport">
+    <div id="spacer"></div>
+</div>
 
-    <div id="boxes-cnt">
-        <!-- <input type="checkbox" id="c1" value="1"> -->
-    </div>
-
-
-  <!----------------------- javascript --------------------------->
 <script src="/socket.io/socket.io.js"></script>
 
 <script>
+const socket = io();
 
-    const container = document.getElementById("boxes-cnt");
+const TOTAL = 1_000_000;
+const ITEM_SIZE = 28; // size + gap
+const VISIBLE_COUNT = 400;
 
-    const socket = io();
+const viewport = document.getElementById("viewport");
+const spacer = document.getElementById("spacer");
 
-    socket.on("connect", () => {
-        console.log("Connected:", socket.id);
-        socket.emit("client:init", {})
+let startIndex = 0;
+let checkedSet = new Set();
+let COLUMNS = 1;
+
+// ----------- Layout Calculations -----------
+function updateColumns() {
+    const width = viewport.clientWidth;
+    COLUMNS = Math.floor(width / ITEM_SIZE) || 1;
+}
+
+function updateSpacer() {
+    const rows = Math.ceil(TOTAL / COLUMNS);
+    spacer.style.height = (rows * ITEM_SIZE) + "px";
+}
+
+// ----------- Fetch -----------
+function fetchWindow(start) {
+    socket.emit("client:init", {
+        start,
+        limit: VISIBLE_COUNT
     });
+}
 
+// ----------- Render -----------
+function render(start) {
+    startIndex = start;
 
-    socket.on("server:init:boxes", (boxes)=>{
+    viewport.innerHTML = "";
 
-        const checkedSet = new Set(boxes);
+    for (let i = start; i < start + VISIBLE_COUNT; i++) {
+        const box = document.createElement("input");
 
-        Array.from({ length: 100000 }).map((_, i) => {
-            const box = document.createElement("input");
-            box.type = "checkbox";
-            box.id = i;
-            box.value = i;
+        box.type = "checkbox";
+        box.dataset.index = i;
 
-            if(checkedSet.has(i)) box.checked = true
-            
-            container.appendChild(box);
-      });
-    })
+        const row = Math.floor(i / COLUMNS);
+        const col = i % COLUMNS;
 
-    container.addEventListener("change", (e) => {
-        if (e.target.type === "checkbox") {
-            socket.emit("client:box:clicked", {
-                index: Number(e.target.id),
-                checked: e.target.checked
-            });
+        box.style.position = "absolute";
+        box.style.top = (row * ITEM_SIZE) + "px";
+        box.style.left = (col * ITEM_SIZE + 12) + "px";
+
+        if (checkedSet.has(i)) {
+            box.checked = true;
         }
-    });
 
-    socket.on("server:box:clicked", (box)=>{
-        console.log("CLIENT:: box-clicked: ", box);
-        document.getElementById(box.index).checked = box.checked;
-    })
+        viewport.appendChild(box);
+    }
 
+    viewport.appendChild(spacer);
+}
 
+// ----------- Scroll -----------
+viewport.addEventListener("scroll", () => {
+    const row = Math.floor(viewport.scrollTop / ITEM_SIZE);
+    const newStart = row * COLUMNS;
+
+    if (newStart !== startIndex) {
+        fetchWindow(newStart);
+    }
+});
+
+// ----------- Resize -----------
+window.addEventListener("resize", () => {
+    updateColumns();
+    updateSpacer();
+    render(startIndex);
+});
+
+// ----------- Socket -----------
+socket.on("connect", () => {
+    updateColumns();
+    updateSpacer();
+    fetchWindow(0);
+});
+
+socket.on("server:init:boxes", (boxes) => {
+    checkedSet = new Set(boxes);
+    render(startIndex);
+});
+
+socket.on("server:box:clicked", (box) => {
+    if (box.checked) {
+        checkedSet.add(box.index);
+    } else {
+        checkedSet.delete(box.index);
+    }
+
+    const el = document.querySelector(`[data-index='${box.index}']`);
+    if (el) el.checked = box.checked;
+});
+
+// ----------- Click -----------
+viewport.addEventListener("change", (e) => {
+    if (e.target.type === "checkbox") {
+        const index = Number(e.target.dataset.index);
+
+        socket.emit("client:box:clicked", {
+            index,
+            checked: e.target.checked
+        });
+    }
+});
 </script>
-
 
 </body>
 </html>

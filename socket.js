@@ -8,6 +8,19 @@ const pub = createRedisConnection();
 const sub = createRedisConnection();
 
 
+//---- ratelimit helper func
+const rateLimit = async (key, limit, windowSec) => {
+    const current = await redis.incr(key);
+
+    if (current === 1) {
+        await redis.expire(key, windowSec);
+    }
+
+    return current <= limit;
+};
+
+
+
 io.on( "connection", (socket)=>{
 
     console.log("User connected:", socket.id);
@@ -34,13 +47,26 @@ io.on( "connection", (socket)=>{
 
     //---- on box click update redis > publish to channel
     socket.on("client:box:clicked", async ({index, checked})=>{
-        console.log("SERVER:: box-clicked: ", index);
+        // console.log("SERVER:: box-clicked: ", index);
+
+
+        const allowed = await rateLimit(
+            `rate:${socket.id}`,
+            5,     // max actions
+            5       // per 5 seconds
+        );
+
+        if (!allowed) {
+            console.log("Rate limit hit:", socket.id);
+            socket.emit("server:rate-limit")
+        }
+
+        if (index < 0 || index > 1_000_000 || typeof checked !== "boolean") return;
 
         await redis.setbit("checkboxes", index, checked ? 1 : 0);
 
         pub.publish("box-updates", JSON.stringify({ index, checked }))
 
-        // io.emit("server:box:clicked", {index, checked})
     })
     
 })
